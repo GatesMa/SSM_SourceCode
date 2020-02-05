@@ -1,5 +1,7 @@
 package com.gatesma.test;
 
+import com.gatesma.aop.Calcator;
+import com.gatesma.aop.MathCalculator;
 import com.gatesma.spring.AppConfig;
 import org.junit.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -20,8 +22,10 @@ public class IOCTest {
 
         AnnotationConfigApplicationContext applicationContext = new AnnotationConfigApplicationContext(AppConfig.class);
 
-        Object person = applicationContext.getBean("person");
-        System.out.println(person);
+//        Object person = applicationContext.getBean("person");
+//        System.out.println(person);
+        Calcator calculator = (Calcator) applicationContext.getBean("mathCalculator");
+        calculator.div(4, 2);
 
     }
 

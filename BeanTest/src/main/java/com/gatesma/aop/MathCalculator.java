@@ -1,5 +1,7 @@
 package com.gatesma.aop;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Copyright (C), 2020
  * FileName: MathCaculator
@@ -8,10 +10,10 @@ package com.gatesma.aop;
  * Date:     2020/2/5 19:40
  * Description:
  */
-public class MathCaculator {
+@Component
+public class MathCalculator implements Calcator{
 
     public int div(int i, int j) {
         return i / j;
     }
-
 }
