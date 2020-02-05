@@ -2,6 +2,7 @@ package com.gatesma.spring;
 
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
 /**
  * Copyright (C), 2020
@@ -12,6 +13,8 @@ import org.springframework.context.annotation.Configuration;
  * Description:
  */
 @Configuration
-@ComponentScan(value = {"com.gatesma"})
+@ComponentScan(value = {"com.gatesma.aop"})
+@EnableAspectJAutoProxy
 public class AppConfig {
+
 }

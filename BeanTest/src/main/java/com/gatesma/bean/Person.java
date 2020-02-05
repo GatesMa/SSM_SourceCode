@@ -1,5 +1,6 @@
 package com.gatesma.bean;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -12,4 +13,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class Person {
+
+    @Autowired
+    private Book book;
+
 }
