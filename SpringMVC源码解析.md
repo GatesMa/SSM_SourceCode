@@ -499,7 +499,7 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
 }
 ```
 
-###### （1）resolveHandlerArguments确定参数
+###### (1) resolveHandlerArguments确定参数
 
 ModelAttribute标注的方法提前运行，并且把执行后的返回值加入到隐含模型中（方法执行的细节）,`resolveHandlerArguments确定方法每一个参数的值`
 
@@ -592,7 +592,12 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
         }
         // 没找到注解的情况
         if (annotationsFound == 0) {
+            // 解析普通参数
             Object argValue = resolveCommonArgument(methodParam, webRequest);
+            /**
+            *这个方法会进入resolveStandardArgument解析标准参数
+            *
+            */
             if (argValue != WebArgumentResolver.UNRESOLVED) {
                 args[i] = argValue;
             }
@@ -661,5 +666,101 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
 
     return args;
 }
+```
+
+
+
+###### (2) resolveCommonArgument解析普通参数
+
+```java
+protected Object resolveCommonArgument(MethodParameter methodParameter, NativeWebRequest webRequest)
+			throws Exception {
+	
+		// Invoke custom argument resolvers if present...
+  	// 执行自定义参数解析器，不关心
+		if (this.customArgumentResolvers != null) {
+			for (WebArgumentResolver argumentResolver : this.customArgumentResolvers) {
+				Object value = argumentResolver.resolveArgument(methodParameter, webRequest);
+				if (value != WebArgumentResolver.UNRESOLVED) {
+					return value;
+				}
+			}
+		}
+
+		// Resolution of standard parameter types...
+		Class<?> paramType = methodParameter.getParameterType();
+    // 调用解析标准参数
+		Object value = resolveStandardArgument(paramType, webRequest);
+		if (value != WebArgumentResolver.UNRESOLVED && !ClassUtils.isAssignableValue(paramType, value)) {
+			throw new IllegalStateException("Standard argument type [" + paramType.getName() +
+					"] resolved to incompatible value of type [" + (value != null ? value.getClass() : null) +
+					"]. Consider declaring the argument type in a less specific fashion.");
+		}
+		return value;
+	}
+```
+
+###### (3) resolveStandardArgument解析标准参数
+
+这个方法在`AnnotationMethodHandlerMapping`中
+
+```java
+@Override
+		protected Object resolveStandardArgument(Class<?> parameterType, NativeWebRequest webRequest) throws Exception {
+			HttpServletRequest request = webRequest.getNativeRequest(HttpServletRequest.class);
+			HttpServletResponse response = webRequest.getNativeResponse(HttpServletResponse.class);
+      // 这里其实就是参数直接可以获取原声API的原理
+			// 判断这个类型是不是ServletRequest
+			if (ServletRequest.class.isAssignableFrom(parameterType) ||
+					MultipartRequest.class.isAssignableFrom(parameterType)) {
+				Object nativeRequest = webRequest.getNativeRequest(parameterType);
+				if (nativeRequest == null) {
+					throw new IllegalStateException(
+							"Current request is not of type [" + parameterType.getName() + "]: " + request);
+				}
+				return nativeRequest;
+			}
+      // 判断这个类型是不是ServletResponse
+			else if (ServletResponse.class.isAssignableFrom(parameterType)) {
+				this.responseArgumentUsed = true;
+				Object nativeResponse = webRequest.getNativeResponse(parameterType);
+				if (nativeResponse == null) {
+					throw new IllegalStateException(
+							"Current response is not of type [" + parameterType.getName() + "]: " + response);
+				}
+				return nativeResponse;
+			}
+      // 判断这个类型是不是HttpSession
+			else if (HttpSession.class.isAssignableFrom(parameterType)) {
+				return request.getSession();
+			}
+      // 判断这个类型是不是Principal
+			else if (Principal.class.isAssignableFrom(parameterType)) {
+				return request.getUserPrincipal();
+			}
+      // 判断这个类型是不是Locale
+			else if (Locale.class.equals(parameterType)) {
+				return RequestContextUtils.getLocale(request);
+			}
+      // 判断这个类型是不是InputStream
+			else if (InputStream.class.isAssignableFrom(parameterType)) {
+				return request.getInputStream();
+			}
+      // 判断这个类型是不是Reader
+			else if (Reader.class.isAssignableFrom(parameterType)) {
+				return request.getReader();
+			}
+      // 判断这个类型是不是OutputStream
+			else if (OutputStream.class.isAssignableFrom(parameterType)) {
+				this.responseArgumentUsed = true;
+				return response.getOutputStream();
+			}
+      // 判断这个类型是不是Writer
+			else if (Writer.class.isAssignableFrom(parameterType)) {
+				this.responseArgumentUsed = true;
+				return response.getWriter();
+			}
+			return super.resolveStandardArgument(parameterType, webRequest);
+		}
 ```
 
