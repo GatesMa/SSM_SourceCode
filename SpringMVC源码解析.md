@@ -795,3 +795,100 @@ protected Object resolveCommonArgument(MethodParameter methodParameter, NativeWe
 		}
 ```
 
+######  (5) 自定义参数确定值
+
+1. 先看是否与原生API，在resolveStandardArgument方法中处理
+2. 看是否Model或者Map类型的参数，传入隐含模型，在看是否其他类型的参数，比如SessionStatus、HttpEntity，在resolveHandlerArguments方法中处理
+3. 在看是否简单类型的（Integer，String.....），如果是，paramName=""，`BeanUtils.isSimpleProperty(paramType)`，在resolveHandlerArguments方法中
+4. 如果都不是，attrName=""，（比如POJO，Book、Person类型），在resolveHandlerArguments方法中
+
+
+
+解析自定义参数（attrName=""）：
+
+```java
+else if (attrName != null) {
+				WebDataBinder binder =
+						resolveModelAttribute(attrName, methodParam, implicitModel, webRequest, handler);
+				boolean assignBindingResult = (args.length > i + 1 && Errors.class.isAssignableFrom(paramTypes[i + 1]));
+				if (binder.getTarget() != null) {
+          // 把对象跟请求中的方法一一绑定
+					doBind(binder, webRequest, validate, validationHints, !assignBindingResult);
+				}
+				args[i] = binder.getTarget();
+				if (assignBindingResult) {
+					args[i + 1] = binder.getBindingResult();
+					i++;
+				}
+				implicitModel.putAll(binder.getBindingResult().getModel());
+			}
+```
+
+
+
+`resolveModelAttribute`方法
+
+```java
+private WebDataBinder resolveModelAttribute(String attrName, MethodParameter methodParam,
+			ExtendedModelMap implicitModel, NativeWebRequest webRequest, Object handler) throws Exception {
+
+		// Bind request parameter onto object...
+		String name = attrName;
+    // 如果attrName为空，使用类型小写（book）
+		if ("".equals(name)) {
+			name = Conventions.getVariableNameForParameter(methodParam);
+		}
+		Class<?> paramType = methodParam.getParameterType();
+		Object bindObject;
+  	// 隐含模型中找
+		if (implicitModel.containsKey(name)) {
+			bindObject = implicitModel.get(name);
+		}
+  	// sessionAttribute中找，如果找不到，还会报错
+		else if (this.methodResolver.isSessionAttribute(name, paramType)) {
+			bindObject = this.sessionAttributeStore.retrieveAttribute(webRequest, name);
+			if (bindObject == null) {
+				raiseSessionRequiredException("Session attribute '" + name + "' required - not found in session");
+			}
+		}
+		else {
+			bindObject = BeanUtils.instantiateClass(paramType);
+		}
+		WebDataBinder binder = createBinder(webRequest, bindObject, name);
+		initBinder(handler, name, binder, webRequest);
+		return binder;
+	}
+```
+
+SpringMVC确定POJO值的三步
+
+1. 如果隐含模型有attrName这个值，就是它（attrName是ModelAttribute指定的，如果没指定，就是类名小写）
+2. 否则看这个变量是不是SessionAttribute标注的属性，如果没值，抛异常
+3. 如果都不是，就利用反射创建空对象
+
+
+
+
+
+###### (6) 参数确定总结（难点）
+
+总结：
+
+1. 看是否有注解，有的话解析注解
+
+2. 如果没有注解：
+
+    1. 看是否原生API
+
+    2. 看是否Model或者Map等类型
+
+    3. 都不是，看是否简单类型，paramName=""
+
+    4. 给attrName赋值，attrName(参数标了@ModelAttribute("")就是指定的，没标就是"")
+
+       ​	确定自定义类型参数：
+
+       	1. attrName使用参数得到类型首字母小写，或者使用之前@ModelAttribute("")的值
+        	2. 先看隐含模型`implicitModel`中有没有这个key对应的值
+        	3. 看是否是@SessionAtrribute标注的属性，如果是从Session中拿，如果拿不到就会抛异常
+        	4. 不是@SessionAtrribute标注的属性，利用反射创建空对象，使用数据绑定器（WebDataBinder）将请求绑定到这个对象中
