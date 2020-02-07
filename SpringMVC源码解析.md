@@ -1,15 +1,28 @@
-------------------------------------------------------------------------------------------------------------------
-大致流程：
-1）、所有的请求过来DispatcherServlet处理
-2）、调用doDispatch()方法进行处理
-    1、getHandler()：根据当前请求在HandlerMapping中找到这个请求的映射信息，找到能够处理这个请求的目标处理器类
-    2、getHandlerAdfapter()：根据当前处理器类获取到能执行这个处理器方法的适配器
-    3、使用刚才的适配器（AnnotationMethodHandlerAdpater）执行目标方法
-    4、目标方法执行后返回一个ModelAndView对象
-    5、根据ModelAndView的信息转发到具体的页面，并可以在请求域中取出ModelMap中的数据
-------------------------------------------------------------------------------------------------------------------
+### SpringMVC源码解析
 
-源码标注版：
+
+
+#### 一、大致流程
+
+1）、所有的请求过来DispatcherServlet处理
+
+2）、调用**doDispatch**()方法进行处理
+
+​    1、**getHandler**()：根据当前请求在HandlerMapping中找到这个请求的映射信息，找到能够处理这个请求的目标处理器类
+
+​    2、**getHandlerAdfapter**()：根据当前处理器类获取到能执行这个处理器方法的适配器
+
+​    3、使用刚才的适配器（AnnotationMethodHandlerAdpater）执行目标方法
+
+​    4、目标方法执行后返回一个ModelAndView对象
+
+​    5、根据ModelAndView的信息转发到具体的页面，并可以在请求域中取出ModelMap中的数据
+
+
+
+#### 二、doDispatch源码标注版：
+
+```java
 
 doDispatch()：
 protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
@@ -115,17 +128,35 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
         }
     }
 }
-------------------------------------------------------------------------------------------------------------------
-细节：
-3）、getHandler()细节：怎么根据当前请求找到哪个类能来处理
-    - 返回HandlerExecutionChain类型的对象，包含handler（目标处理方法信息）、interceptorList（拦截器信息）等
+```
 
-getHandler():
+
+
+\------------------------------------------------------------------------------------------------------------------
+
+#### 三、细节
+
+##### **1、getHandler**()细节
+
+怎么根据当前请求找到哪个类能来处理
+
+​    \- 返回HandlerExecutionChain类型的对象，包含handler（目标处理方法信息）、interceptorList（拦截器信息）等
+
+
+
+**getHandler**():
+
 handlerMappings：处理器映射，它里面保存了每一个处理器可以处理哪些请求（默认两个）
-    - BeanNameUrlHandlerMapping 通过配置文件
-    - *DefaultAnnotationHandlerMapping 通过注解，通过注解标注的RequestMapping映射关系都在这个类的handlerMap中
+
+- **BeanNameUrlHandlerMapping** 通过配置文件
+
+- **DefaultAnnotationHandlerMapping** 通过注解，通过注解标注的RequestMapping映射关系都在这个类的handlerMap中
+
 为什么handlerMappings保存了映射呢？
-    IOC启动会扫描所有的Controller，介时将RequestMapping映射保存在DefaultAnnotationHandlerMapping中
+
+​    IOC启动会扫描所有的Controller，介时将RequestMapping映射保存在DefaultAnnotationHandlerMapping中
+
+```java
 protected HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
     for (HandlerMapping hm : this.handlerMappings) {
         if (logger.isTraceEnabled()) {
@@ -139,17 +170,31 @@ protected HandlerExecutionChain getHandler(HttpServletRequest request) throws Ex
     }
     return null;
 }
-------------------------------------------------------------
+```
 
-4）、getHandlerAdapter()细节：怎么根据当前请求找到哪个类能来处理
+
+
+##### 2、**getHandlerAdapter**()细节
+
+怎么根据当前请求找到哪个类能来处理
+
 > HandlerAdapter用于调用处理器方法，并且为处理器方法提供参数解析、返回值处理等适配工作，使使用者专心于业务逻辑的实现。
 
-getHandlerAdapter():
+
+
+**getHandlerAdapter**():
+
 遍历所有的handlerAdapters，查看哪个adapter可以support这个handler，（handlerAdapters默认有3个handlerAdapter）
-    - HttpRequestHandlerAdapter 实现HttpRequestHandler接口，用于处理Http requests，其类似于一个简单的Servlet
-    - SimpleControllerHandlerAdapter 实现Controller接口的处理器，
-        你的自定义Controller如果实现的是Controller接口，则需要使用SimpleControllerHandlerAdapter适配器来执行自定义Controller
-    - *AnnotationMethodHandlerAdapter 能解析注解方法的适配器（没有配置annotation-driven就是这个）
+
+- HttpRequestHandlerAdapter 实现HttpRequestHandler接口，用于处理Http requests，其类似于一个简单的Servlet
+
+- SimpleControllerHandlerAdapter 实现Controller接口的处理器，
+
+​        你的自定义Controller如果实现的是Controller接口，则需要使用SimpleControllerHandlerAdapter适配器来执行自定义Controller
+
+- **AnnotationMethodHandlerAdapter** 能解析注解方法的适配器（没有配置annotation-driven就是这个）
+
+```java
 protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletException {
     Iterator var2 = this.handlerAdapters.iterator();
 
@@ -167,12 +212,19 @@ protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletExcepti
 
     return ha;
 }
-------------------------------------------------------------------------------------------------------------------
-！！！DispatcherSrvlet中有几个引用类型的属性：SpringMVC的九大组件！！！
-SpringMVC在工作的时候，关键位置都是由这些组件完成的：
-共同点：九大组件全都是《接口》，<接口就是规范>，接口提供了扩展性
+```
 
-SpringMVC的九大组件的工作原理（大佬级别）
+##### 3、SpringMVC的九大组件
+
+​	DispatcherSrvlet中有几个引用类型的属性：SpringMVC的九大组件
+
+​	SpringMVC在工作的时候，关键位置都是由这些组件完成的：共同点：九大组件全都是《接口》，<接口就是规范>，接口提供了扩展性
+
+
+
+​	SpringMVC的九大组件的工作原理（大佬级别）
+
+```java
 
 /** MultipartResolver used by this servlet */
 /** 文件上传解析器 */
@@ -209,23 +261,34 @@ private FlashMapManager flashMapManager;
 /** List of ViewResolvers used by this servlet */
 /** 视图解析器 */
 private List<ViewResolver> viewResolvers;
+```
 
-------------------------------------------------------------------------------------------------------------------
-～！～
-DispatcherServlet 实现了onRefresh()方法，这个方法刚好对应SpringIOC容器 refresh()中留给子类实现的一步！
-所以这个 onRefresh()方法会在初始化IOC容器的时候被执行，用于初始化九大组件：
 
+
+##### 4、onRefresh()初始化细节
+
+- DispatcherServlet 实现了**onRefresh**()方法，这个方法刚好对应SpringIOC容器 **refresh**()中留给子类实现的一步！
+
+- 所以这个 **onRefresh**()方法会在初始化IOC容器的时候被执行，用于初始化九大组件：
+
+```java
 @Override
 protected void onRefresh(ApplicationContext context) {
     initStrategies(context);
 }
+```
+
+组件的初始化：
+
+​    有些组件在容器中是使用类型找的，有些组件是使用ID找的
+
+​    去容器中找这个组件，如果没有找到就用默认配置
+
+```java
 /**
     * Initialize the strategy objects that this servlet uses.
     * <p>May be overridden in subclasses in order to initialize further strategy objects.
     */
-组件的初始化：
-    有些组件在容器中是使用类型找的，有些组件是使用ID找的
-    去容器中找这个组件，如果没有找到就用默认配置
 protected void initStrategies(ApplicationContext context) {
     initMultipartResolver(context);
     initLocaleResolver(context);
@@ -238,9 +301,15 @@ protected void initStrategies(ApplicationContext context) {
     initFlashMapManager(context);
 }
 
+```
+
 例如：初始化HanderMappings：
-会加载DispatcherServlet.properties 里九大组件的默认类，
-例如HadlerMapping就是BeanNameUrlHandlerMapping和DefaultAnnotationHandlerMapping
+
+会加载`DispatcherServlet.properties `里九大组件的默认类，
+
+例如HadlerMapping就是`BeanNameUrlHandlerMapping`和`DefaultAnnotationHandlerMapping`
+
+```java
 private void initHandlerMappings(ApplicationContext context) {
     this.handlerMappings = null;
 
@@ -280,10 +349,21 @@ private void initHandlerMappings(ApplicationContext context) {
         }
     }
 }
+```
 
-------------------------------------------------------------------------------------------------------------------
-锁定到目标方法的执行，handle()的细节（反射如何确定参数等）：
+
+
+
+
+##### 5、**handle**()的细节
+
+锁定到目标方法的执行，**handle**()的细节（反射如何确定参数等）
+
+```java
 mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+```
+
+```java
 
 @Override
 public ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -318,12 +398,15 @@ public ModelAndView handle(HttpServletRequest request, HttpServletResponse respo
             }
         }
     }
-
+    // 这个主要，调用了invokeHandlerMethod方法
     return invokeHandlerMethod(request, response, handler);
 }
 
+```
 
 
+
+```java
 
 protected ModelAndView invokeHandlerMethod(HttpServletRequest request, HttpServletResponse response, Object handler)
         throws Exception {
@@ -338,17 +421,22 @@ protected ModelAndView invokeHandlerMethod(HttpServletRequest request, HttpServl
     // 获取implicitModel隐含模型（是一个BindingAwareModelMap对象，给这个Map放的东西可以放在请求域中）    implicit：含蓄的、隐含
     ExtendedModelMap implicitModel = new BindingAwareModelMap();
 
-    // ----------
-    // 这一步是真正执行方法，获得一个返回值，可能是一个字符串，例如（success）（目标方法执行期间确定参数值，提前执行modelAttribute等所有操作
-    // 都在这一步）
+
+    /**
+    * 这一步是真正执行方法，获得一个返回值，可能是一个字符串，例如（success）（目标方法执行期间确定参数值，提前执行modelAttribute等所有操作都在这一步）
+    */
     Object result = methodInvoker.invokeHandlerMethod(handlerMethod, handler, webRequest, implicitModel);
-    // ----------
+
     ModelAndView mav =
             methodInvoker.getModelAndView(handlerMethod, handler.getClass(), result, implicitModel, webRequest);
     methodInvoker.updateModelAttributes(handler, (mav != null ? mav.getModel() : null), implicitModel, webRequest);
     return mav;
 }
+```
 
+
+
+```java
 public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
 			NativeWebRequest webRequest, ExtendedModelMap implicitModel) throws Exception {
 
@@ -362,11 +450,14 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
                 implicitModel.addAttribute(attrName, attrValue);
             }
         }
+        // ***************重要*****************
         // 执行所有的ModelAttribute标注的方法，将返回值加入到隐含模型
         for (Method attributeMethod : this.methodResolver.getModelAttributeMethods()) {
             Method attributeMethodToInvoke = BridgeMethodResolver.findBridgedMethod(attributeMethod);
+            // ***************重要*****************
             // 确定ModelAttribute方法执行时要使用的每一个参数的值
             Object[] args = resolveHandlerArguments(attributeMethodToInvoke, handler, webRequest, implicitModel);
+          
             if (debug) {
                 logger.debug("Invoking model attribute method: " + attributeMethodToInvoke);
             }
@@ -375,8 +466,11 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
                 continue;
             }
             ReflectionUtils.makeAccessible(attributeMethodToInvoke);
+            // ***************重要*****************
             // 反射执行方法
             Object attrValue = attributeMethodToInvoke.invoke(handler, args);
+          
+          
             if ("".equals(attrName)) {
                 Class<?> resolvedType = GenericTypeResolver.resolveReturnType(attributeMethodToInvoke, handler.getClass());
                 attrName = Conventions.getVariableNameForReturnType(attributeMethodToInvoke, resolvedType, attrValue);
@@ -403,16 +497,20 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
         return null;
     }
 }
-------------------------------------------------------------------------------------------------------------------
+```
 
-ModelAttribute标注的方法提前运行，并且把执行后的返回值加入到隐含模型中（方法执行的细节）：
-----resolveHandlerArguments确定方法每一个参数的值----
+###### （1）resolveHandlerArguments确定参数
+
+ModelAttribute标注的方法提前运行，并且把执行后的返回值加入到隐含模型中（方法执行的细节）,`resolveHandlerArguments确定方法每一个参数的值`
+
+```java
 private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
 			NativeWebRequest webRequest, ExtendedModelMap implicitModel) throws Exception {
 
     Class<?>[] paramTypes = handlerMethod.getParameterTypes();
     Object[] args = new Object[paramTypes.length];
 
+  	// 遍历目标方法参数的个数
     for (int i = 0; i < args.length; i++) {
         MethodParameter methodParam = new MethodParameter(handlerMethod, i);
         methodParam.initParameterNameDiscovery(this.parameterNameDiscoverer);
@@ -428,16 +526,22 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
         boolean validate = false;
         Object[] validationHints = null;
         int annotationsFound = 0;
+        // 获取参数上标注的注解
         Annotation[] paramAnns = methodParam.getParameterAnnotations();
-
+				// 遍历这个参数标注的所有注解，解析注解，保存信息
         for (Annotation paramAnn : paramAnns) {
+            // 注解是RequestParam
             if (RequestParam.class.isInstance(paramAnn)) {
                 RequestParam requestParam = (RequestParam) paramAnn;
+                // 注解值
                 paramName = requestParam.value();
+                // 注解required的值
                 required = requestParam.required();
                 defaultValue = parseDefaultValueAttribute(requestParam.defaultValue());
+                // 如果解析成功，这个值++
                 annotationsFound++;
             }
+            // 注解是RequestHeader
             else if (RequestHeader.class.isInstance(paramAnn)) {
                 RequestHeader requestHeader = (RequestHeader) paramAnn;
                 headerName = requestHeader.value();
@@ -445,10 +549,12 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
                 defaultValue = parseDefaultValueAttribute(requestHeader.defaultValue());
                 annotationsFound++;
             }
+            // 注解是RequestBody
             else if (RequestBody.class.isInstance(paramAnn)) {
                 requestBodyFound = true;
                 annotationsFound++;
             }
+            // 注解是CookieValue
             else if (CookieValue.class.isInstance(paramAnn)) {
                 CookieValue cookieValue = (CookieValue) paramAnn;
                 cookieName = cookieValue.value();
@@ -456,31 +562,35 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
                 defaultValue = parseDefaultValueAttribute(cookieValue.defaultValue());
                 annotationsFound++;
             }
+            // 注解是PathVariable
             else if (PathVariable.class.isInstance(paramAnn)) {
                 PathVariable pathVar = (PathVariable) paramAnn;
                 pathVarName = pathVar.value();
                 annotationsFound++;
             }
+            // 注解是ModelAttribute
             else if (ModelAttribute.class.isInstance(paramAnn)) {
                 ModelAttribute attr = (ModelAttribute) paramAnn;
                 attrName = attr.value();
                 annotationsFound++;
             }
+            // 注解是Value
             else if (Value.class.isInstance(paramAnn)) {
                 defaultValue = ((Value) paramAnn).value();
             }
+            // 注解是。。。
             else if (paramAnn.annotationType().getSimpleName().startsWith("Valid")) {
                 validate = true;
                 Object value = AnnotationUtils.getValue(paramAnn);
                 validationHints = (value instanceof Object[] ? (Object[]) value : new Object[] {value});
             }
         }
-
+				// 上述注解标注超过一个，抛异常
         if (annotationsFound > 1) {
             throw new IllegalStateException("Handler parameter annotations are exclusive choices - " +
                     "do not specify more than one such annotation on the same parameter: " + handlerMethod);
         }
-
+        // 没找到注解的情况
         if (annotationsFound == 0) {
             Object argValue = resolveCommonArgument(methodParam, webRequest);
             if (argValue != WebArgumentResolver.UNRESOLVED) {
@@ -551,7 +661,5 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
 
     return args;
 }
-------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------------------------------
+```
+
