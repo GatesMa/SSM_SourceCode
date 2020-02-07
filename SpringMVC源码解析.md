@@ -1,3 +1,5 @@
+
+
 ### SpringMVC源码解析
 
 
@@ -357,11 +359,30 @@ private void initHandlerMappings(ApplicationContext context) {
 
 ##### 5、**handle**()的细节
 
+- 隐含模型`implicitModel`中的数据可以在Request域中取到
+
 锁定到目标方法的执行，**handle**()的细节（反射如何确定参数等）
 
 ```java
 mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
 ```
+
+1. （`invokeHandlerMethod`）如果SessionAtributes的对象有值，加入到隐含模型`implicitModel`
+
+2. （`invokeHandlerMethod`）执行所有ModelAttribute标注的方法
+3. （`invokeHandlerMethod`）执行目标方法
+
+在执行ModelAttribute方法和目标方法时，会确定方法的参数，设计很巧妙：
+
+1. `resolveHandlerArguments`确定参数，先看是不是注解标注的参数，进行解析，如果不是，调用`resolveCommonArgument`解析普通参数
+2. `resolveCommonArgument`，先调用resolveStandardArgument解析标准参数（填充Request等原生部件），**然后看组件是不是Model或者Map类型，直接将`implicitModel`传过去**
+3. `resolveStandardArgument`解析标准参数（这里填充Request等原生部件）
+
+
+
+如果ModelAttribute方法标注没有value标识（attrName=""），会解析返回值类型作为attrName，然后把返回值加入到隐含模型`implicitModel`中
+
+
 
 ```java
 
@@ -434,7 +455,9 @@ protected ModelAndView invokeHandlerMethod(HttpServletRequest request, HttpServl
 }
 ```
 
+###### (1)  invokeHandlerMethod方法
 
+这个类中部分重要逻辑
 
 ```java
 public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
@@ -479,11 +502,13 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
                 implicitModel.addAttribute(attrName, attrValue);
             }
         }
+        // 解析目标方法的参数！！！同ModelAttribute方法
         Object[] args = resolveHandlerArguments(handlerMethodToInvoke, handler, webRequest, implicitModel);
         if (debug) {
             logger.debug("Invoking request handler method: " + handlerMethodToInvoke);
         }
         ReflectionUtils.makeAccessible(handlerMethodToInvoke);
+        // 执行目标方法！！
         return handlerMethodToInvoke.invoke(handler, args);
     }
     catch (IllegalStateException ex) {
@@ -499,7 +524,7 @@ public final Object invokeHandlerMethod(Method handlerMethod, Object handler,
 }
 ```
 
-###### (1) resolveHandlerArguments确定参数
+###### (2) resolveHandlerArguments确定参数
 
 ModelAttribute标注的方法提前运行，并且把执行后的返回值加入到隐含模型中（方法执行的细节）,`resolveHandlerArguments确定方法每一个参数的值`
 
@@ -594,18 +619,21 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
         if (annotationsFound == 0) {
             // 解析普通参数
             Object argValue = resolveCommonArgument(methodParam, webRequest);
-            /**
-            *这个方法会进入resolveStandardArgument解析标准参数
-            *
-            */
+            // 如果解析普通参数（标准参数）成功，直接返回
             if (argValue != WebArgumentResolver.UNRESOLVED) {
                 args[i] = argValue;
             }
+          	// 是否有默认值
             else if (defaultValue != null) {
                 args[i] = resolveDefaultValue(defaultValue);
             }
             else {
+              	// 拿到参数类型
                 Class<?> paramType = methodParam.getParameterType();
+              	// ************重要*************
+              	// 是否Model类型 ！！或者Map类型
+                // 直接将implicitModel放过去
+              	// *****************************
                 if (Model.class.isAssignableFrom(paramType) || Map.class.isAssignableFrom(paramType)) {
                     if (!paramType.isAssignableFrom(implicitModel.getClass())) {
                         throw new IllegalStateException("Argument [" + paramType.getSimpleName() + "] is of type " +
@@ -614,12 +642,15 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
                     }
                     args[i] = implicitModel;
                 }
+              	// 是否SessionStatus类型
                 else if (SessionStatus.class.isAssignableFrom(paramType)) {
                     args[i] = this.sessionStatus;
                 }
+              	// 是否HttpEntity类型
                 else if (HttpEntity.class.isAssignableFrom(paramType)) {
                     args[i] = resolveHttpEntityRequest(methodParam, webRequest);
                 }
+              	// 是否Errors类型
                 else if (Errors.class.isAssignableFrom(paramType)) {
                     throw new IllegalStateException("Errors/BindingResult argument declared " +
                             "without preceding model attribute. Check your handler method signature!");
@@ -670,7 +701,7 @@ private Object[] resolveHandlerArguments(Method handlerMethod, Object handler,
 
 
 
-###### (2) resolveCommonArgument解析普通参数
+###### (3) resolveCommonArgument解析普通参数
 
 ```java
 protected Object resolveCommonArgument(MethodParameter methodParameter, NativeWebRequest webRequest)
@@ -700,7 +731,7 @@ protected Object resolveCommonArgument(MethodParameter methodParameter, NativeWe
 	}
 ```
 
-###### (3) resolveStandardArgument解析标准参数
+###### (4) resolveStandardArgument解析标准参数
 
 这个方法在`AnnotationMethodHandlerMapping`中
 
