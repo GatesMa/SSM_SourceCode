@@ -1,7 +1,7 @@
 package com.gatesma.test;
 
 import com.gatesma.entities.Employee;
-import com.gatesma.entities.EmployeeMapper;
+import com.gatesma.dao.EmployeeMapper;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -10,7 +10,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.ConnectionPendingException;
 
 /**
  * Copyright (C), 2020

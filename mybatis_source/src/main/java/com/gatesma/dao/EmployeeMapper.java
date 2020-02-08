@@ -1,4 +1,6 @@
-package com.gatesma.entities;
+package com.gatesma.dao;
+
+import com.gatesma.entities.Employee;
 
 /**
  * Copyright (C), 2020
