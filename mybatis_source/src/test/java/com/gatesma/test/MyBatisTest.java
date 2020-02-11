@@ -64,4 +64,23 @@ public class MyBatisTest {
         }
     }
 
+    @Test
+    public void test03() {
+        SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        try {
+            EmployeeMapper mapper = sqlSession.getMapper(EmployeeMapper.class);
+            //Employee employee = new Employee(null,"lvy", "lvy@foxmail.com", "0");
+//            mapper.addEmp(employee);
+//            System.out.println(employee);
+            Employee marlon = mapper.getEmpByNameAndGender("marlon", "0");
+            System.out.println(marlon);
+            sqlSession.commit();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            sqlSession.close();
+        }
+    }
+
 }

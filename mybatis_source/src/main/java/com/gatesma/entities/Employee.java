@@ -15,6 +15,7 @@ public class Employee {
     private String email;
     private String gender;
 
+
     public Integer getId() {
         return id;
     }
@@ -55,5 +56,21 @@ public class Employee {
                 ", email='" + email + '\'' +
                 ", gender='" + gender + '\'' +
                 '}';
+    }
+
+    public Employee(String lastName, String email, String gender) {
+        this.lastName = lastName;
+        this.email = email;
+        this.gender = gender;
+    }
+
+    public Employee(Integer id, String lastName, String email, String gender) {
+        this.id = id;
+        this.lastName = lastName;
+        this.email = email;
+        this.gender = gender;
+    }
+
+    public Employee() {
     }
 }

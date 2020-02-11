@@ -1,6 +1,7 @@
 package com.gatesma.dao;
 
 import com.gatesma.entities.Employee;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * Copyright (C), 2020
@@ -13,5 +14,9 @@ import com.gatesma.entities.Employee;
 public interface EmployeeMapper {
 
     public Employee getEmpById(Integer id);
+
+    public void addEmp(Employee employee);
+
+    public Employee getEmpByNameAndGender(@Param("name") String name, @Param("gender") String gender);
 
 }
