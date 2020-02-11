@@ -204,7 +204,169 @@ Mybatis四大对象：
     }
 ```
 
+1. 获取`sqlSessionFactory`对象:
 
+   解析文件的每一个信息保存在Configuration中，返回包含Configuration的DefaultSqlSession；
+
+   注意：`【MappedStatement】`：代表一个增删改查的详细信息
+
+   ![image-20200211170304244](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211170304244.png)
+
+2. 获取`sqlSession`对象
+
+   返回一个DefaultSQlSession对象，包含Executor和Configuration;`这一步会创建Executor对象`
+
+   ```java
+   this.openSessionFromConnection(this.configuration.getDefaultExecutorType(), connection);
+   
+   
+   this.configuration.getDefaultExecutorType():
+   	配置文件里可以配置Executor的类型（defaultExecutorType）：SIMPLE、REUSE、BATCH。默认SIMPLE
+   ```
+
+   ```java
+   private SqlSession openSessionFromDataSource(ExecutorType execType, TransactionIsolationLevel level, boolean autoCommit) {
+       Transaction tx = null;
+   
+       DefaultSqlSession var8;
+       try {
+         //	获取当前环境
+           Environment environment = this.configuration.getEnvironment();
+         // 创建事务  
+         TransactionFactory transactionFactory = this.getTransactionFactoryFromEnvironment(environment);
+           tx = transactionFactory.newTransaction(environment.getDataSource(), level, autoCommit);
+         // *************四大对象之一：Executor在这里创建**************
+         // Executor就是进行增删改查的
+           Executor executor = this.configuration.newExecutor(tx, execType);
+         	// 最终返回的SqlSession是DefaultSqlSession，包含Configuration、刚刚创建的executor
+           var8 = new DefaultSqlSession(this.configuration, executor, autoCommit);
+       } catch (Exception var12) {
+           this.closeTransaction(tx);
+           throw ExceptionFactory.wrapException("Error opening session.  Cause: " + var12, var12);
+       } finally {
+           ErrorContext.instance().reset();
+       }
+   
+       return var8;
+   }
+   ```
+
+   ```java
+   //创建Executor，【Configuration.java】
+   public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
+       executorType = executorType == null ? this.defaultExecutorType : executorType;
+       executorType = executorType == null ? ExecutorType.SIMPLE : executorType;
+       Object executor;
+     	// 根据全局配置中的配置的类型创建Executor（默认SIMPLE）
+       if (ExecutorType.BATCH == executorType) {
+           executor = new BatchExecutor(this, transaction);
+       } else if (ExecutorType.REUSE == executorType) {
+           executor = new ReuseExecutor(this, transaction);
+       } else {
+           executor = new SimpleExecutor(this, transaction);
+       }
+   		// 如果配置了二级缓存，利用CachingExecutor进行包装（Executor执行之前，对缓存进行查询）
+       if (this.cacheEnabled) {
+           executor = new CachingExecutor((Executor)executor);
+       }
+   		// 拿到所有的拦截器，执行plugin方法，这一步非常重要，与插件有关
+     	// 使用每一个拦截器重新包装Executor，再返回
+       Executor executor = (Executor)this.interceptorChain.pluginAll(executor);
+       return executor;
+   }
+   ```
+
+   ```java
+   // 最终返回的SqlSession是DefaultSqlSession，包含Configuration、刚刚创建的executor
+   var8 = new DefaultSqlSession(this.configuration, executor, autoCommit);
+   ```
+
+   **最终返回的SqlSession是DefaultSqlSession，包含Configuration、刚刚创建的executor**
+
+   ![image-20200211170411636](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211170411636.png)
+
+3. 获取接口的代理对象（`MapperProxy`）
+
+   `getMapper`，使用`MapperProxyFactory`创建一个`MapperProxy`的代理对象,代理对象里面包含了，`DefaultSqlSession（Executor）`
+
+   ![image-20200211170609424](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211170609424.png)
+
+   `Configuration里有一个很重要的属性：MapperRegistry` ，用于获取接口的代理对象`MapperProxy`：
+
+   ```java
+   // MapperRegistry的getMapper方法：
+   public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+     	// 根据<接口类型>获取MapperProxyFactory
+       MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory)this.knownMappers.get(type);
+       if (mapperProxyFactory == null) {
+           throw new BindingException("Type " + type + " is not known to the MapperRegistry.");
+       } else {
+           try {
+             	// 调用MapperProxyFactory的newInstance创建代理对象
+               return mapperProxyFactory.newInstance(sqlSession);
+           } catch (Exception var5) {
+               throw new BindingException("Error getting mapper instance. Cause: " + var5, var5);
+           }
+       }
+   }
+   ```
+
+   ```java
+   // MapperProxyFactory的newInstance方法
+   public T newInstance(SqlSession sqlSession) {
+     	// SqlSession、接口方法
+       MapperProxy<T> mapperProxy = new MapperProxy(sqlSession, this.mapperInterface, this.methodCache);
+       return this.newInstance(mapperProxy);
+   }
+   ```
+
+   ```java
+   // MapperProxy是一个InvocationHandler类型的对象，可以用来创建动态代理
+   public class MapperProxy<T> implements InvocationHandler, Serializable {
+       private static final long serialVersionUID = -6424540398559729838L;
+       private final SqlSession sqlSession;
+       private final Class<T> mapperInterface;
+     	// 接口方法映射 
+       private final Map<Method, MapperMethod> methodCache;
+   }
+   ```
+
+   ```java
+   // 用JDK的API创建代理对象，这个代理对象会一步步的返回，最终拿到的Mapper是一个代理对象
+   protected T newInstance(MapperProxy<T> mapperProxy) {
+       return Proxy.newProxyInstance(this.mapperInterface.getClassLoader(), new Class[]{this.mapperInterface}, mapperProxy);
+   }
+   ```
+
+   最终拿到的mapper：包含sqlSession（MapperProxy有invoke方法，是一个InvocationHandler类型的对象）
+
+   
+
+   ![image-20200211172121651](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211172121651.png)
+
+4. 代理对象执行增删改查
+
+
+
+## 三、代理对象如何执行增删改查
+
+
+
+```java
+// MapperProxy的invoke
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    if (Object.class.equals(method.getDeclaringClass())) {
+        try {
+            return method.invoke(this, args);
+        } catch (Throwable var5) {
+            throw ExceptionUtil.unwrapThrowable(var5);
+        }
+    } else {
+        MapperMethod mapperMethod = this.cachedMapperMethod(method);
+        return mapperMethod.execute(this.sqlSession, args);
+    }
+}
+```
 
 
 
@@ -212,7 +374,7 @@ Mybatis四大对象：
 
 #### 1、参数值的获取(#、$)
 
-```java
+```sql
 
 #{}：可以获取map中的值或者pojo对象属性的值；
 ${}：可以获取map中的值或者pojo对象属性的值；
