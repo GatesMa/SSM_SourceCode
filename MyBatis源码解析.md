@@ -1,4 +1,4 @@
-# MyBatis源码解析
+#  MyBatis源码解析
 
 ## 一、mybatis怎么处理参数以及执行方法？
 
@@ -350,11 +350,12 @@ Mybatis四大对象：
 
 ## 三、代理对象如何执行增删改查
 
-
+![image-20200211172937945](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211172937945.png)
 
 ```java
 // MapperProxy的invoke
 public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+  	// 有些方法是Object的方法，例如toString、hashCode等等，这些方法直接执行就行了
     if (Object.class.equals(method.getDeclaringClass())) {
         try {
             return method.invoke(this, args);
@@ -363,10 +364,343 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
         }
     } else {
         MapperMethod mapperMethod = this.cachedMapperMethod(method);
+      	// invoke的时候调用MapperMethod的execute方法
         return mapperMethod.execute(this.sqlSession, args);
     }
 }
 ```
+
+ invoke的时候调用`MapperMethod`的execute方法，传入`SqlSession`以及需要的参数`args`
+
+```java
+// MapperMethod的execute方法
+public Object execute(SqlSession sqlSession, Object[] args) {
+        Object param;
+        Object result;
+        switch(this.command.getType()) {
+        // 判断当前执行的方法是哪种类型，执行方法之前都会解析参数（解析方法名）
+        case INSERT:
+            param = this.method.convertArgsToSqlCommandParam(args);
+            result = this.rowCountResult(sqlSession.insert(this.command.getName(), param));
+            break;
+        case UPDATE:
+            param = this.method.convertArgsToSqlCommandParam(args);
+            result = this.rowCountResult(sqlSession.update(this.command.getName(), param));
+            break;
+        case DELETE:
+            param = this.method.convertArgsToSqlCommandParam(args);
+            result = this.rowCountResult(sqlSession.delete(this.command.getName(), param));
+            break;
+        case SELECT:
+            // 如果是SELECT，还会判断返回的数量以及返回类型
+            if (this.method.returnsVoid() && this.method.hasResultHandler()) {
+                this.executeWithResultHandler(sqlSession, args);
+                result = null;
+            } else if (this.method.returnsMany()) {
+                result = this.executeForMany(sqlSession, args);
+            } else if (this.method.returnsMap()) {
+                result = this.executeForMap(sqlSession, args);
+            } else if (this.method.returnsCursor()) {
+                result = this.executeForCursor(sqlSession, args);
+            } else {
+              	// 其他情况，如果只有一个返回值，先解析参数
+                param = this.method.convertArgsToSqlCommandParam(args);
+                result = sqlSession.selectOne(this.command.getName(), param);
+            }
+            break;
+        case FLUSH:
+            result = sqlSession.flushStatements();
+            break;
+        default:
+            throw new BindingException("Unknown execution method for: " + this.command.getName());
+        }
+
+        if (result == null && this.method.getReturnType().isPrimitive() && !this.method.returnsVoid()) {
+            throw new BindingException("Mapper method '" + this.command.getName() + " attempted to return null from a method with a primitive return type (" + this.method.getReturnType() + ").");
+        } else {
+            return result;
+        }
+    }
+```
+
+调用`sqlSession.selectOne(this.command.getName(), param)`，SqlSession的原生方法：
+
+```java
+// DefaultSqlSession的selectOne方法
+public <T> T selectOne(String statement, Object parameter) {
+        List<T> list = this.selectList(statement, parameter);
+        if (list.size() == 1) {
+            return list.get(0);
+        } else if (list.size() > 1) {
+            throw new TooManyResultsException("Expected one result (or null) to be returned by selectOne(), but found: " + list.size());
+        } else {
+            return null;
+        }
+    }
+```
+
+就算是查询单个，最后也是调用selectList，返回第一个元素
+
+```java
+// DefaultSqlSession的selectOne方法
+public <E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds) {
+  List var5;
+  try {
+    // 从全局配置中获取statement对应的MappedStatement信息
+    MappedStatement ms = this.configuration.getMappedStatement(statement);
+    // 调用Executor的增删改查
+    var5 = this.executor.query(ms, this.wrapCollection(parameter), rowBounds, Executor.NO_RESULT_HANDLER);
+  } catch (Exception var9) {
+    throw ExceptionFactory.wrapException("Error querying database.  Cause: " + var9, var9);
+  } finally {
+    ErrorContext.instance().reset();
+  }
+
+  return var5;
+}
+```
+
+调用Executor的增删改查：`this.executor.query(ms, this.wrapCollection(parameter), rowBounds, Executor.NO_RESULT_HANDLER);`
+
+```java
+//Collection array list 参数名称逻辑，了解即可
+private Object wrapCollection(Object object) {
+        DefaultSqlSession.StrictMap map;
+        if (object instanceof Collection) {
+            map = new DefaultSqlSession.StrictMap();
+            map.put("collection", object);
+            if (object instanceof List) {
+                map.put("list", object);
+            }
+
+            return map;
+        } else if (object != null && object.getClass().isArray()) {
+            map = new DefaultSqlSession.StrictMap();
+            map.put("array", object);
+            return map;
+        } else {
+            return object;
+        }
+    }
+```
+
+```java
+// Executor的query 不是重要方法
+public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+  // BoundSql：Sql语句相关的信息，参数等
+  BoundSql boundSql = ms.getBoundSql(parameterObject);
+  // 缓存相关，了解即可
+  CacheKey key = this.createCacheKey(ms, parameterObject, rowBounds, boundSql);
+  return this.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+}
+```
+
+```java
+// this.query() 5个参数的重载方法，不是重要方法
+public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+  // 缓存相关， 从缓存中拿
+  // 这里是二级缓存
+  Cache cache = ms.getCache();
+  if (cache != null) {
+    this.flushCacheIfRequired(ms);
+    if (ms.isUseCache() && resultHandler == null) {
+      this.ensureNoOutParams(ms, parameterObject, boundSql);
+      List<E> list = (List)this.tcm.getObject(cache, key);
+      if (list == null) {
+        list = this.delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+        this.tcm.putObject(cache, key, list);
+      }
+
+      return list;
+    }
+  }
+	// 真正的Executor进行执行方法
+  return this.delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+}
+```
+
+```java
+// Executor执行方法，默认是SIMPLE
+public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+  ErrorContext.instance().resource(ms.getResource()).activity("executing a query").object(ms.getId());
+  if (this.closed) {
+    throw new ExecutorException("Executor was closed.");
+  } else {
+    if (this.queryStack == 0 && ms.isFlushCacheRequired()) {
+      this.clearLocalCache();
+    }
+
+    List list;
+    try {
+      ++this.queryStack;
+      // 缓存相关，一级缓存在这里
+      list = resultHandler == null ? (List)this.localCache.getObject(key) : null;
+      if (list != null) {
+        this.handleLocallyCachedOutputParameters(ms, key, parameter, boundSql);
+      } else {
+        //*********************主要方法*********************
+        list = this.queryFromDatabase(ms, parameter, rowBounds, resultHandler, key, boundSql);
+        //************************************************
+      }
+    } finally {
+      --this.queryStack;
+    }
+
+    if (this.queryStack == 0) {
+      Iterator i$ = this.deferredLoads.iterator();
+
+      while(i$.hasNext()) {
+        BaseExecutor.DeferredLoad deferredLoad = (BaseExecutor.DeferredLoad)i$.next();
+        deferredLoad.load();
+      }
+
+      this.deferredLoads.clear();
+      if (this.configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT) {
+        this.clearLocalCache();
+      }
+    }
+
+    return list;
+  }
+}
+```
+
+```java
+//BaseExecutor的queryFromDatabase
+private <E> List<E> queryFromDatabase(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+  // 缓存中放一个占位符
+  this.localCache.putObject(key, ExecutionPlaceholder.EXECUTION_PLACEHOLDER);
+
+  List list;
+  try {
+    list = this.doQuery(ms, parameter, rowBounds, resultHandler, boundSql);
+  } finally {
+    this.localCache.removeObject(key);
+  }
+	// 数据保存在缓存中（一级缓存）
+  this.localCache.putObject(key, list);
+  if (ms.getStatementType() == StatementType.CALLABLE) {
+    this.localOutputParameterCache.putObject(key, parameter);
+  }
+
+  return list;
+}
+```
+
+
+
+```java
+//SimpleExecutor的doQuery方法
+//传入参数：MappedStatement、parameter参数、rowBounds（数据数量限制，不重要，Mybatis做逻辑分页的）、resultHandler（到这里还是null）、boundSql（Sql语句信息）
+public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+  // 这个Statement就是原生JDBC的Statement
+  Statement stmt = null;
+
+  List var9;
+  try {
+    Configuration configuration = ms.getConfiguration();
+    // 四大对象之一，StatementHandler可以创建出Statement对象
+    // 创建了一个PreparedStatement对象，Prepared是默认值，也可以是Callable等
+    StatementHandler handler = configuration.newStatementHandler(this.wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
+    stmt = this.prepareStatement(handler, ms.getStatementLog());
+    var9 = handler.query(stmt, resultHandler);
+  } finally {
+    this.closeStatement(stmt);
+  }
+  return var9;
+}
+```
+
+```java
+// Configuration的newStatementHandler
+public StatementHandler newStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+  StatementHandler statementHandler = new RoutingStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
+  // 这里创建了StatementHandler之后，也会执行所有拦截器的方法
+  StatementHandler statementHandler = (StatementHandler)this.interceptorChain.pluginAll(statementHandler);
+  return statementHandler;
+}
+```
+
+预编译SQL：PreparedStatement，预编译使用`ParamenterHandler`设置参数
+
+```java
+// PreparedStatementHandler的query
+public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+  PreparedStatement ps = (PreparedStatement)statement;
+  ps.execute();
+  // 数据查出来后，使用resultSetHandler封装数据
+  return this.resultSetHandler.handleResultSets(ps);
+}
+```
+
+```java
+// handleResultSets处理参数
+// 还是使用到了原生的JDBC 
+public List<Object> handleResultSets(Statement stmt) throws SQLException {
+  ErrorContext.instance().activity("handling results").object(this.mappedStatement.getId());
+  List<Object> multipleResults = new ArrayList();
+  int resultSetCount = 0;
+  ResultSetWrapper rsw = this.getFirstResultSet(stmt);
+  List<ResultMap> resultMaps = this.mappedStatement.getResultMaps();
+  int resultMapCount = resultMaps.size();
+  this.validateResultMapsCount(rsw, resultMapCount);
+
+  while(rsw != null && resultMapCount > resultSetCount) {
+    ResultMap resultMap = (ResultMap)resultMaps.get(resultSetCount);
+    this.handleResultSet(rsw, resultMap, multipleResults, (ResultMapping)null);
+    rsw = this.getNextResultSet(stmt);
+    this.cleanUpAfterHandlingResultSet();
+    ++resultSetCount;
+  }
+
+  String[] resultSets = this.mappedStatement.getResultSets();
+  if (resultSets != null) {
+    while(rsw != null && resultSetCount < resultSets.length) {
+      ResultMapping parentMapping = (ResultMapping)this.nextResultMaps.get(resultSets[resultSetCount]);
+      if (parentMapping != null) {
+        String nestedResultMapId = parentMapping.getNestedResultMapId();
+        ResultMap resultMap = this.configuration.getResultMap(nestedResultMapId);
+        this.handleResultSet(rsw, resultMap, (List)null, parentMapping);
+      }
+
+      rsw = this.getNextResultSet(stmt);
+      this.cleanUpAfterHandlingResultSet();
+      ++resultSetCount;
+    }
+  }
+
+  return this.collapseSingleResultList(multipleResults);
+}
+```
+
+```java
+// Resulthandler的getPropertyMappingValue，
+// 将查询的值和属性值映射起来
+private Object getPropertyMappingValue(ResultSet rs, MetaObject metaResultObject, ResultMapping propertyMapping, ResultLoaderMap lazyLoader, String columnPrefix) throws SQLException {
+  if (propertyMapping.getNestedQueryId() != null) {
+    return this.getNestedQueryMappingValue(rs, metaResultObject, propertyMapping, lazyLoader, columnPrefix);
+  } else if (propertyMapping.getResultSet() != null) {
+    this.addPendingChildRelation(rs, metaResultObject, propertyMapping);
+    return DEFERED;
+  } else {
+    TypeHandler<?> typeHandler = propertyMapping.getTypeHandler();
+    String column = this.prependPrefix(propertyMapping.getColumn(), columnPrefix);
+    return typeHandler.getResult(rs, column);
+  }
+}
+```
+
+
+
+## 总结
+
+四大对象，代理对象使用里面的`SqlSession`，`SqlSession`又使用里面的`Executor`。使用`StatementHandler`设置Sql预编译（创建`StatementHandler`的同时，会创建`Parameterhandler`和`ResultSetHandler`），使用`Parameterhandler`设置参数，使用`ResultSetHandler`处理结果，这两个都涉及到`TypeHandler`，
+
+![image-20200211195803748](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211195803748.png)
+
+![image-20200211195824147](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211195824147.png)
+
+![image-20200211195837657](/Users/gatesma/Library/Application Support/typora-user-images/image-20200211195837657.png)
 
 
 
