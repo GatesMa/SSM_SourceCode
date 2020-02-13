@@ -24,7 +24,7 @@ public class Recv2 {
         //获取Channel
         Channel channel = connection.createChannel();
         //声明队列
-        channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+        channel.queueDeclare(QUEUE_NAME, true, false, false, null);
         channel.basicQos(1);
         //声明消费者
         DefaultConsumer defaultConsumer = new DefaultConsumer(channel) {

@@ -29,7 +29,7 @@ public class Send {
         int pefetchCount = 1;
         channel.basicQos(pefetchCount);
         //声明队列
-        channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+        channel.queueDeclare(QUEUE_NAME, true, false, false, null);
         //发送的消息
         for(int i = 0;i < 50;i++) {
             String msg = "Hello WorkQueue :" + i;

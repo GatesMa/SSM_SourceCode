@@ -1,4 +1,4 @@
-package com.gatesma.rabbitmq.workfair;
+package com.gatesma.rabbitmq.pb;
 
 import com.gatesma.rabbitmq.util.ConnectionUtils;
 import com.rabbitmq.client.*;
@@ -8,24 +8,30 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Copyright (C), 2020
- * FileName: Recv
+ * FileName: Recv1
  * Author:   Marlon
  * Email: gatesma@foxmail.com
- * Date:     2020/2/13 18:10
+ * Date:     2020/2/13 19:22
  * Description:
  */
 public class Recv1 {
 
-    private static final String QUEUE_NAME = "test_work_queue";
+    private static final String EXCHANGE_NAME = "test_exchange_fanout";
+
+    private static final String QUEUE_NAME = "test_queue_fanout_email";
 
     public static void main(String[] args) throws IOException, TimeoutException {
         //获取连接
         Connection connection = ConnectionUtils.getConnection();
-        //获取Channel
+
+        //创建一个Channel
         Channel channel = connection.createChannel();
-        //声明队列
-        channel.queueDeclare(QUEUE_NAME, true, false, false, null);
+        //创建队列
+        channel.queueDeclare(QUEUE_NAME, false, false, false, null);
         channel.basicQos(1);
+        //绑定队列到交换机
+        channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, "");
+
         //声明消费者
         DefaultConsumer defaultConsumer = new DefaultConsumer(channel) {
             @Override
@@ -38,13 +44,11 @@ public class Recv1 {
                     e.printStackTrace();
                 } finally {
                     System.out.println("[Recv] [1] deal done!");
-                    //收到消息，应答
                     channel.basicAck(envelope.getDeliveryTag(), false);
                 }
             }
         };
-        Boolean autoAck = false;
+        Boolean autoAck = true;
         channel.basicConsume(QUEUE_NAME, autoAck, defaultConsumer);
     }
-
 }
